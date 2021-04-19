@@ -1,0 +1,135 @@
+---
+title: "Experiment Analysis"
+author: "Prakhar Maini"
+date: "4/7/2021"
+output: html_document
+---
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include=FALSE}
+library(tidyverse)
+library(vtable)
+library(stargazer)
+library(lmtest)
+library(sandwich)
+```
+
+## Loading base data 
+
+We start the analysis with loading the experiment data csv file. 
+
+```{r message=FALSE, warning=FALSE}
+d <- read.csv(file = 'D:/MIDS/DATASCI_W241/Experiment_analysis/exp_full_data_prepared.csv', header = T)
+head(d)
+```
+
+## Creating balance table 
+
+In the next step, we extract the relevant columns from the baseline dataset
+
+```{r message=FALSE, warning=FALSE}
+d1 <-  d %>% 
+  select(Bin_group, age, income, gender, education) %>% 
+  mutate(age_group = as.factor(age)) %>% 
+  mutate(income_group = as.factor(income)) 
+
+sumtable(d1, group = "Bin_group", group.long = F, group.test = T, factor.percent = T)
+```
+
+## Running experiment for all three products
+
+In this step, we will run the analysis for each product. We will use the prior value and demographic features as covariates and try simple regression with robust standard errors to undersatnd if our treatment has an impact on final score. 
+
+```{r message=FALSE, warning=FALSE}
+
+mod_camera <- lm(formula = camera1 ~ Bin_group + camera0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income), data = d)
+cov_camera <- vcovHC(mod_camera, type = "HC1")
+mod_headphone <- lm(formula = headphone1 ~ Bin_group + headphone0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income), data = d)
+cov_headphone <- vcovHC(mod_headphone, type = "HC1")
+mod_laptop <- lm(formula = laptop1 ~ Bin_group + laptop0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income), data = d)
+cov_laptop <- vcovHC(mod_laptop, type = "HC1")
+```
+
+Now that we know all the individual models for each product alongside their robust standard errors, we can look into creating a stargazer summary of the final analysis across three products.
+
+```{r message=FALSE, warning=FALSE}
+stargazer(mod_camera, mod_headphone, mod_laptop, type = "text", 
+          se = list(sqrt(diag(cov_camera)), sqrt(diag(cov_headphone)), sqrt(diag(cov_laptop))), 
+          dep.var.labels = c("Camera - Post treatment", "Headphone - Post treatment", "Laptop - Post treatment"), 
+          omit = c("age", "gender", "education", "income"),
+          omit.labels = c("Age buckets", "Gender buckets", "Education buckets", "Income buckets"),
+          covariate.labels = c("Treatment", "Previous Score - Camera", "Previous Score - Headphone" , "Previous Score - Laptop"),
+          model.numbers = F)
+```
+
+
+From the above analysis, we see that we don't have enough evidence to reject the null hypothesis that the round pricing doesn't affects product perceptions compared to non-round pricing. 
+
+
+### Exploration of heterogeneous treatment effect
+In the final step we can explore the potential heterogenity in treatment effect acorss multiple age groups and genders. We focus first on age as other parameters have more buckets.
+
+
+```{r warning=FALSE, message=FALSE}
+mod_camera_hte_age <- lm(formula = camera1 ~ Bin_group + camera0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income) + Bin_group * as.factor(age), data = d)
+mod_headphone_hte_age <- lm(formula = headphone1 ~ Bin_group + headphone0 + as.factor(age) + as.factor(gender) + as.factor(education)+as.factor(income) + Bin_group * as.factor(age),data = d)
+mod_laptop_hte_age <- lm(formula = laptop1 ~ Bin_group + laptop0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income) + Bin_group * as.factor(age), data = d)
+
+mod_camera_hte_gender <- lm(formula = camera1 ~ Bin_group + camera0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income) + Bin_group * as.factor(gender), data = d)
+mod_headphone_hte_gender <- lm(formula = headphone1 ~ Bin_group + headphone0 + as.factor(age) + as.factor(gender) + as.factor(education)+as.factor(income) + Bin_group * as.factor(gender),data = d)
+mod_laptop_hte_gender <- lm(formula = laptop1 ~ Bin_group + laptop0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income) + Bin_group * as.factor(gender), data = d)
+
+mod_camera_hte_education <- lm(formula = camera1 ~ Bin_group + camera0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income) + Bin_group * as.factor(income), data = d)
+mod_headphone_hte_education <- lm(formula = headphone1 ~ Bin_group + headphone0 + as.factor(age) + as.factor(gender) + as.factor(education)+as.factor(income) + Bin_group * as.factor(income),data = d)
+mod_laptop_hte_education <- lm(formula = laptop1 ~ Bin_group + laptop0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income) + Bin_group * as.factor(income), data = d)
+
+mod_camera_hte_income <- lm(formula = camera1 ~ Bin_group + camera0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income) + Bin_group * as.factor(education), data = d)
+mod_headphone_hte_income <- lm(formula = headphone1 ~ Bin_group + headphone0 + as.factor(age) + as.factor(gender) + as.factor(education)+as.factor(income) + Bin_group * as.factor(education),data = d)
+mod_laptop_hte_income <- lm(formula = laptop1 ~ Bin_group + laptop0 + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income) + Bin_group * as.factor(education), data = d)
+```
+
+
+```{r warning=FALSE, message=FALSE}
+anova(mod_camera, mod_camera_hte_age, mod_camera_hte_education, mod_camera_hte_gender, mod_camera_hte_income)
+
+anova(mod_headphone, mod_headphone_hte_age, mod_headphone_hte_education, mod_headphone_hte_gender, mod_headphone_hte_income)
+
+anova(mod_laptop, mod_laptop_hte_age, mod_laptop_hte_education, mod_laptop_hte_gender, mod_laptop_hte_income)
+
+```
+
+```{r warning=FALSE, message=FALSE}
+d_long <- read.csv(file = 'D:/MIDS/DATASCI_W241/Experiment_analysis/exp_full_data_long.csv', header = T)
+head(d_long)
+```
+
+```{r warning=FALSE, message=FALSE}
+mod_cl <- lm(formula = post_reading ~ Bin_group + pre_reading + as.factor(age) + as.factor(gender) + as.factor(education) + as.factor(income), data = d_long)
+cov_cl <- vcovCL(mod_cl, cluster = d_long$worker_id)
+
+stargazer(mod_cl, type = "text", 
+          se = list(sqrt(diag(cov_cl))), 
+          dep.var.labels = c("Clustered Assignment - Post treatment value"), 
+          omit = c("age", "gender", "education", "income"),
+          omit.labels = c("Age buckets", "Gender buckets", "Education buckets", "Income buckets"),
+          covariate.labels = c("Treatment", "Pre-treatment average score"),
+          model.numbers = F)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
